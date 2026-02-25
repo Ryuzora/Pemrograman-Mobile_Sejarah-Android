@@ -1,14 +1,14 @@
 package com.example.mobilerillnih
 
-import android.app.ActivityManager
+import android.annotation.SuppressLint
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.os.BatteryManager
 import android.os.Bundle
-import android.os.Environment
-import android.os.StatFs
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.overscroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,17 +31,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ModifierLocalBeyondBoundsLayout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.mobilerillnih.ui.theme.MobilerillnihTheme
-import kotlin.math.roundToInt
 
 
 class MainActivity : ComponentActivity() {
@@ -112,23 +108,9 @@ Selama dekade berikutnya, Android berevolusi pesat melalui sistem penamaan versi
     }
 }
 
-fun getTotalRam(context: Context): String {
-    val actManager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-    val memInfo = ActivityManager.MemoryInfo()
-    actManager.getMemoryInfo(memInfo)
-    val totalGb = memInfo.totalMem / (1024.0 * 1024.0 * 1024.0)
-    return "${totalGb.roundToInt()} GB"
-}
-
-fun getTotalRom(): String {
-    val path = Environment.getDataDirectory()
-    val stat = StatFs(path.path)
-    val totalGb = (stat.blockCountLong * stat.blockSizeLong) / (1024.0 * 1024.0 * 1024.0)
-    return "${totalGb.roundToInt()} GB"
-}
-
 data class DeviceProperty(val label: String, val value: String)
 
+@SuppressLint("ServiceCast")
 @Composable
 fun SecondPage(onBackClick: () -> Unit){
     Column(modifier = Modifier.padding(16.dp)){
@@ -148,7 +130,7 @@ fun SecondPage(onBackClick: () -> Unit){
             "Linux Kernel"
         )}
 
-        Column() {
+        Column {
             architectures.forEach { item ->
                 Card(
                     modifier = Modifier
@@ -168,16 +150,30 @@ fun SecondPage(onBackClick: () -> Unit){
         Spacer(modifier = Modifier.height(64.dp))
 
         val context = LocalContext.current
+        val batteryManager = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+        val batteryLevel = batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = connectivityManager.activeNetwork
+        val capabilities = connectivityManager.getNetworkCapabilities(network)
+        val isWifi = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        val isCellular = capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+        val connectionType = when {
+            isWifi -> "WiFi"
+            isCellular -> "Cellular"
+            else -> "No Connection"
+        }
 
-        val deviceInfo = remember { listOf(
-            DeviceProperty("Brand", android.os.Build.BRAND),
-            DeviceProperty("Model", android.os.Build.MODEL),
-            DeviceProperty("Manufacturer", android.os.Build.MANUFACTURER),
-            DeviceProperty("Android Version", android.os.Build.VERSION.RELEASE),
-            DeviceProperty("Hardware", android.os.Build.HARDWARE),
-            DeviceProperty("RAM", getTotalRam(context)),
-            DeviceProperty("Storage", getTotalRom())
-        )}
+        val deviceInfo = remember {
+            listOf(
+                DeviceProperty("Brand", android.os.Build.BRAND),
+                DeviceProperty("Model", android.os.Build.MODEL),
+                DeviceProperty("Manufacturer", android.os.Build.MANUFACTURER),
+                DeviceProperty("Android Version", android.os.Build.VERSION.RELEASE),
+                DeviceProperty("Kernel Version", System.getProperty("os.version") ?: "Unknown"),
+                DeviceProperty("Battery Level", "$batteryLevel%"),
+                DeviceProperty("Connection Type", connectionType)
+            )
+        }
 
         Text(
             text = "Device Information",
@@ -189,24 +185,22 @@ fun SecondPage(onBackClick: () -> Unit){
         )
 
         LazyColumn {
-            items(deviceInfo){ item ->
-                (
-                        Card(
-                            modifier = Modifier
-                                .padding(2.dp)
-                                .fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = Color.LightGray,
-                                contentColor = Color.Black
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row (modifier = Modifier.padding(start = 12.dp)) {
-                                Text(text = item.label + ": ")
-                                Text(text = item.value)
-                            }
-                        }
-                        )
+            items(deviceInfo) { item ->
+                Card(
+                    modifier = Modifier
+                        .padding(2.dp)
+                        .fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.LightGray,
+                        contentColor = Color.Black
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(modifier = Modifier.padding(start = 12.dp)) {
+                        Text(text = item.label + ": ")
+                        Text(text = item.value)
+                    }
+                }
             }
         }
 
